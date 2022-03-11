@@ -35,7 +35,11 @@ const init = (): void => {
     }
 
     camera = new PerspectiveCamera(30, window.innerWidth / window.innerHeight, 1, 5000);
-    camera.position.set(50, 60, 50);
+    //camera.position.set(50, 60, 50);
+    // macro position
+    // camera.position.set(-25, 3.4, -9.9);
+    // overview slightly from above
+    camera.position.set(-48.87240121521194, 4.3125335835219305, 10.337305019800793);
 
     scene = new Scene();
     scene.background = new Color().setHSL(0.6, 0, 1);
@@ -50,7 +54,7 @@ const init = (): void => {
     scene.add(hemiLight);
 
     const hemiLightHelper = new HemisphereLightHelper(hemiLight, 10);
-    scene.add(hemiLightHelper);
+    // scene.add(hemiLightHelper);
 
     const dirLight = new DirectionalLight(0xffffff, 1);
     dirLight.color.setHSL(0.1, 1, 0.95);
@@ -74,7 +78,7 @@ const init = (): void => {
     dirLight.shadow.bias = - 0.0001;
 
     const dirLightHelper = new DirectionalLightHelper(dirLight, 10);
-    scene.add(dirLightHelper);
+    // scene.add(dirLightHelper);
 
     // GROUND
 
@@ -83,7 +87,7 @@ const init = (): void => {
     groundMat.color.setHSL(0.095, 1, 0.75);
 
     const ground = new Mesh(groundGeo, groundMat);
-    ground.position.y = - 3;
+    ground.position.y = - 10;
     ground.rotation.x = - Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
