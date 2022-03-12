@@ -1,7 +1,9 @@
 # 3D hex map
 
-Just playing around with Three.js and TypeScript.
+![An experiment with hex maps and webgl](./docs/screenshot.png)
 
+
+Just playing around with Three.js and TypeScript.
 
 ## Installation
 
@@ -12,15 +14,9 @@ This project uses TypeScript and Webpack. So installation is pretty simple:
   npm start
 ```
 
-## Further reading 
+## Acknowledgements
 
-- Three.js API doc: https://threejs.org/docs/
-- Great introduction to Three.js: https://discoverthreejs.com/book/
-  - The Big List of three.js Tips and Tricks! - https://discoverthreejs.com/tips-and-tricks/
-- Making a Skydome: https://www.ianww.com/blog/2014/02/17/making-a-skydome-in-three-dot-js/
+For this experiment i'm using Kay Lousberg's [Medieval Builder Pack](kaylousberg.com). 
 
 
-## License
-
-[MIT](https://choosealicense.com/licenses/mit/)
-
+[![WTFPL](http://www.wtfpl.net/wp-content/uploads/2012/12/wtfpl-badge-4.png)](http://www.wtfpl.net/)
