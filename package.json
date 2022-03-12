@@ -1,11 +1,20 @@
 {
-  "name": "game-hex-map",
+  "name": "3d-hex-map",
   "version": "0.0.1",
-  "description": "how to display a map of hex tiles for a later game",
+  "description": "An experiment with hex maps and three.js",
   "main": "index.html",
   "author": "thomas@redtoad.de",
-  "license": "MIT",
-  "private": true,
+  "homepage": "https://attkins-hex-map.netlify.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/attkins/3d-hex-map"
+  },
+  "keywords": [
+    "three.js",
+    "webgl",
+    "typescript"
+  ],
+  "license": "WTFPL",
   "scripts": {
     "start": "npm run dev",
     "dev": "webpack serve --config ./webpack.dev.js",
