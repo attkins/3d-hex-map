@@ -132,7 +132,7 @@ const init = (): void => {
 
     controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true;
-    // sty with the camera over the horizon
+    // stay with the camera over the horizon
     controls.maxPolarAngle = Math.PI / 2;
 
     // MAP

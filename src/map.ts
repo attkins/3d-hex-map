@@ -21,8 +21,8 @@ const initMap = (scene: Scene): void => {
     const rows = 30;
     const cols = 20;
 
-    const offsetX = 2;
-    const offsetZ = 1.75;
+    const offsetX = 1.99;
+    const offsetZ = 1.74;
 
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
