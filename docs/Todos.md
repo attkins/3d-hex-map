@@ -26,3 +26,18 @@
 ## Bugs
 
 - How to cast shadows
+
+
+🧠 Nächster sinnvoller Schritt (empfohlen)
+
+Wenn du willst, können wir:
+
+🌲 InstancedMesh für Tiles & Bäume
+
+🗺 Axial / Cube Hex-Koordinaten
+
+⛰ echte Höhen + Smooth Normals
+
+⚡ Shadow-Performance halbieren bei gleicher Qualität
+
+Sag einfach, was du als Nächstes angehen willst 👌

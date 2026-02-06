@@ -14,6 +14,8 @@ import {
   WebGLRenderer,
   PCFSoftShadowMap,
   GLSL3,
+  AmbientLight,
+  PCFShadowMap,
 } from 'three';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
@@ -44,17 +46,20 @@ const init = (): void => {
   scene.fog = new Fog(scene.background, 1, 5000);
 
   // LIGHTS
-  const hemiLight = new HemisphereLight(0xffffff, 0xffffff, 0.6);
+  const hemiLight = new HemisphereLight(0xffffff, 0xffffff, 0.8);
   hemiLight.color.setHSL(0.6, 1, 0.6);
   hemiLight.groundColor.setHSL(0.095, 1, 0.75);
   hemiLight.position.set(0, 50, 0);
   scene.add(hemiLight);
 
-  const dirLight = new DirectionalLight(0xffffff, 1);
+  const dirLight = new DirectionalLight(0xffffff, 1.5);
   dirLight.color.setHSL(0.1, 1, 0.95);
   dirLight.position.set(50, 100, 50);
   dirLight.target.position.set(0, 0, 0);
   dirLight.castShadow = true;
+
+  const ambient = new AmbientLight(0xffffff, 0.2);
+  scene.add(ambient);
 
   // Shadow camera
   const d = 180; // nicht zu groß, sonst Qualität sinkt
@@ -65,17 +70,23 @@ const init = (): void => {
   dirLight.shadow.camera.near = 1;
   dirLight.shadow.camera.far = 500;
 
-  dirLight.shadow.mapSize.set(2048, 2048);
+  dirLight.shadow.mapSize.set(4096, 4096);
+
   dirLight.shadow.bias = -0.0005;
 
   scene.add(dirLight);
   scene.add(dirLight.target);
 
+  hemiLight.intensity = 0.8;
+  dirLight.intensity = 1.8;
+
   // GROUND
   const ground = new Mesh(new PlaneGeometry(10000, 10000), new MeshLambertMaterial({ color: 0xffffff }));
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -10;
-  ground.receiveShadow = true;
+
+  ground.castShadow = false;
+  ground.receiveShadow = false;
   scene.add(ground);
 
   // SKYDOME
@@ -86,13 +97,17 @@ const init = (): void => {
     exponent: { value: 0.6 },
   };
 
+  uniforms.bottomColor.value = new Color(0xffffff);
+  uniforms.topColor.value = new Color(0x9ad6ff);
+  uniforms.exponent.value = 0.8;
+
   uniforms.topColor.value.copy(hemiLight.color);
   scene.fog.color.copy(uniforms.bottomColor.value);
 
   const sky = new Mesh(
     new SphereGeometry(4000, 32, 15),
     new ShaderMaterial({
-      glslVersion: GLSL3, // <-- hier
+      glslVersion: GLSL3,
       uniforms,
       vertexShader,
       fragmentShader,
@@ -100,7 +115,8 @@ const init = (): void => {
     })
   );
 
-  console.log('vertexShader:', vertexShader.slice(0, 120));
+  sky.castShadow = false;
+  sky.receiveShadow = false;
 
   scene.add(sky);
 
@@ -110,7 +126,9 @@ const init = (): void => {
   renderer.setPixelRatio(window.devicePixelRatio);
 
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = PCFSoftShadowMap;
+
+  renderer.shadowMap.type = PCFShadowMap;
+  dirLight.shadow.bias = -0.0001;
 
   container.appendChild(renderer.domElement);
 
