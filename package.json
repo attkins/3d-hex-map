@@ -2,7 +2,6 @@
   "name": "3d-hex-map",
   "version": "1.0.0",
   "description": "An experiment with hex maps and three.js",
-  "main": "index.html",
   "author": "thomas@redtoad.de",
   "homepage": "https://attkins-hex-map.netlify.app",
   "repository": {
@@ -17,22 +16,18 @@
   "license": "WTFPL",
   "scripts": {
     "start": "npm run dev",
-    "dev": "webpack serve --config ./webpack.dev.js",
-    "build": "webpack build --config ./webpack.common.js"
+    "dev": "parcel src/index.html",
+    "build": "parcel build src/index.html"
   },
   "devDependencies": {
-    "ts-loader": "^9.2.6",
-    "typescript": "^4.5.5",
-    "webpack": "^5.69.1",
-    "webpack-cli": "^4.9.2",
-    "webpack-dev-server": "^4.7.4",
-    "webpack-merge": "^5.8.0"
+    "@parcel/transformer-glsl": "^2.16.4",
+    "@parcel/transformer-inline-string": "^2.16.4",
+    "parcel": "^2.16.4",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@types/three": "^0.138.0",
-    "clean-webpack-plugin": "^4.0.0",
-    "copy-webpack-plugin": "^10.2.4",
-    "html-webpack-plugin": "^5.5.0",
-    "three": "^0.138.3"
+    "@types/three": "^0.182.0",
+    "three": "^0.182.0"
   }
 }

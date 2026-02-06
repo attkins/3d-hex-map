@@ -1,93 +1,68 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hex map test</title>
 
-    <head>
-        <meta charset="utf-8"/>
-        <meta name="viewport" content="width=device-width, initial-scale=1"/>
-        <title>Hex map test</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Playfair+Display:ital,wght@1,500&family=Trocchi&display=swap"
+      rel="stylesheet"
+    />
 
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="crossorigin">
-        <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Playfair+Display:ital,wght@1,500&family=Trocchi&display=swap" rel="stylesheet">
+    <style>
+      body {
+        overflow: hidden;
+        margin: 0;
+        background-color: #444;
+      }
+      header {
+        position: absolute;
+        bottom: 10px;
+        right: 20px;
+        text-align: right;
+        z-index: 1;
+      }
+      #container {
+      }
+      h1 {
+        color: #7c796d;
+        font-family: 'Luckiest Guy', cursive;
+        font-size: 45px;
+        font-weight: normal;
+        line-height: 48px;
+        margin: 0;
+      }
+      p {
+        color: #4c4a47;
+        font-family: sans-serif;
+        font-size: 18px;
+        line-height: 32px;
+        margin: 0 0 24px;
+      }
+      a,
+      a:hover,
+      a:visited {
+        color: #4c4a47;
+      }
+    </style>
+  </head>
 
-        <style>
-            body {
-                overflow: hidden;
-                margin: 0;
-                background-color: #444;
-            }
+  <body>
+    <header>
+      <h1>hex map test.</h1>
+      <p>
+        A
+        <a href="https://github.com/attkins/3d-hex-map">WebGL experiment</a>
+        with
+        <a href="https://threejs.org/">Three.js</a>
+      </p>
+    </header>
 
-            header {
-                position: absolute;
-                bottom: 10px;
-                right: 20px;
-                text-align: right;
-                z-index: 1;
-            }
+    <div id="container"></div>
 
-            #container {}
-
-            h1 {
-                color: #7c796d;
-                font-family: 'Luckiest Guy', cursive;
-                font-size: 45px;
-                font-weight: normal;
-                line-height: 48px;
-                margin: 0;
-            }
-
-            p {
-                color: #4c4a47;
-                font-family: sans-serif;
-                font-size: 18px;
-                line-height: 32px;
-                margin: 0 0 24px;
-            }
-
-            a,
-            a:hover,
-            a:visited {
-                color: #4c4a47;
-            }
-        </style>
-    </head>
-
-    <body>
-        <header>
-            <h1>hex map test.</h1>
-            <p>A
-                <a href="https://github.com/attkins/3d-hex-map">WebGL experiment</a>
-                with
-                <a href="https://threejs.org/">Three.js</a>
-            </p>
-        </header>
-
-        <div id="container"></div>
-
-        <script type="x-shader/x-vertex" id="vertexShader">
-            varying vec3 vWorldPosition;
-
-            void main() {
-                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-                vWorldPosition = worldPosition.xyz;
-
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-        </script>
-        <script type="x-shader/x-fragment" id="fragmentShader">
-            uniform vec3 topColor;
-            uniform vec3 bottomColor;
-            uniform float offset;
-            uniform float exponent;
-
-            varying vec3 vWorldPosition;
-
-            void main() {
-                float h = normalize(vWorldPosition + offset).y;
-                gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
-            }
-        </script>
-        <script type="module" src="bundle.js"></script>
-    </body>
-
+    <script type="module" src="./hex-map-test.ts"></script>
+  </body>
 </html>

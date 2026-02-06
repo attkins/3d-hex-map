@@ -12,12 +12,18 @@ import {
   ShaderMaterial,
   SphereGeometry,
   WebGLRenderer,
-  sRGBEncoding,
   PCFSoftShadowMap,
+  GLSL3,
 } from 'three';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { init as initMap } from './map';
+
+import vertexShader from './shaders/vertex.glsl?raw';
+import fragmentShader from './shaders/fragment.glsl?raw';
+
+console.log('vertexShader type:', typeof vertexShader);
+console.log('vertexShader first chars:', vertexShader.slice(0, 20));
 
 let camera: PerspectiveCamera;
 let scene: Scene;
@@ -86,12 +92,16 @@ const init = (): void => {
   const sky = new Mesh(
     new SphereGeometry(4000, 32, 15),
     new ShaderMaterial({
+      glslVersion: GLSL3, // <-- hier
       uniforms,
-      vertexShader: document.getElementById('vertexShader')?.textContent ?? '',
-      fragmentShader: document.getElementById('fragmentShader')?.textContent ?? '',
+      vertexShader,
+      fragmentShader,
       side: BackSide,
     })
   );
+
+  console.log('vertexShader:', vertexShader.slice(0, 120));
+
   scene.add(sky);
 
   // RENDERER
@@ -99,7 +109,6 @@ const init = (): void => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
 
-  renderer.outputEncoding = sRGBEncoding;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
 
