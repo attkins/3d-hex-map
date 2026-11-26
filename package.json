@@ -1,7 +1,9 @@
 {
   "name": "3d-hex-map",
-  "version": "1.0.0",
-  "description": "An experiment with hex maps and three.js",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A web based 3D take on the hex strategy game Slay, played on a dome that four elephants carry on a turtle",
+  "type": "module",
   "author": "thomas@redtoad.de",
   "homepage": "https://attkins-hex-map.netlify.app",
   "repository": {
@@ -11,23 +13,61 @@
   "keywords": [
     "three.js",
     "webgl",
-    "typescript"
+    "typescript",
+    "hex-grid",
+    "strategy-game"
   ],
   "license": "WTFPL",
   "scripts": {
-    "start": "npm run dev",
-    "dev": "parcel src/index.html",
-    "build": "parcel build src/index.html"
+    "dev": "vite",
+    "start": "vite",
+    "build": "npm run type-check && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "check": "npm run lint && npm run format:check && npm run type-check && npm test",
+    "stats:dome": "node --experimental-strip-types tools/dome-stats.ts",
+    "changelog": "git-cliff --output CHANGELOG.md",
+    "release": "node scripts/release.mjs",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major",
+    "hooks:install": "git config core.hooksPath .githooks"
   },
-  "devDependencies": {
-    "@parcel/transformer-glsl": "^2.16.4",
-    "@parcel/transformer-inline-string": "^2.16.4",
-    "parcel": "^2.16.4",
-    "ts-loader": "^9.5.4",
-    "typescript": "^5.9.3"
+  "engines": {
+    "node": "^22.13.0 || >=24.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,js,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,html,css,yml,yaml}": "prettier --write"
   },
   "dependencies": {
-    "@types/three": "^0.182.0",
     "three": "^0.182.0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.7",
+    "@types/three": "^0.182.0",
+    "@vitest/coverage-v8": "^5.1.2",
+    "eslint": "^10.15.0",
+    "eslint-config-prettier": "^10.1.8",
+    "git-cliff": "^2.14.2",
+    "globals": "^17.14.0",
+    "lint-staged": "^17.6.2",
+    "prettier": "^3.10.1",
+    "typescript": "~5.9",
+    "typescript-eslint": "^8.74.0",
+    "vite": "^8.4.0",
+    "vitest": "^5.1.2"
   }
 }

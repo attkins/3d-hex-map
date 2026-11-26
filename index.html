@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hex dome test</title>
+    <style>
+      body {
+        overflow: hidden;
+        margin: 0;
+        background-color: #0b0e1a;
+        font-family: sans-serif;
+      }
+      #hud {
+        position: absolute;
+        top: 12px;
+        left: 16px;
+        color: #dfe6ff;
+        font-size: 14px;
+        line-height: 22px;
+        z-index: 1;
+        user-select: none;
+      }
+      #hud b {
+        color: #ffd166;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hud"></div>
+    <div id="container"></div>
+    <script type="module" src="./src/dome-test.ts"></script>
+  </body>
+</html>

@@ -1,5 +1,14 @@
 node_modules
 dist
+coverage
 .parcel-cache
 
-.vscode
+.DS_Store
+*.log
+*.tsbuildinfo
+
+.idea/
+.vscode/
+
+# Blender writes a backup next to every save
+*.blend1
