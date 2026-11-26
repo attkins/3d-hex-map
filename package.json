@@ -1,6 +1,6 @@
 {
   "name": "3d-hex-map",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "A web based 3D take on the hex strategy game Slay, played on a dome that four elephants carry on a turtle",
   "type": "module",
