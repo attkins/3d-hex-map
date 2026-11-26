@@ -1,5 +1,5 @@
-import { Object3D, Mesh } from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import type { Object3D, Mesh } from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 enum FILES {
   TILE_FOREST = './models/hex_forest_detail.gltf.glb',
@@ -29,7 +29,7 @@ export let models: Models;
 
 function setupShadows(object: Object3D, cast: boolean, receive: boolean) {
   object.traverse((child) => {
-    if (!(child as any).isMesh) return;
+    if (!(child as Mesh).isMesh) return;
 
     const mesh = child as Mesh;
     mesh.castShadow = cast;
@@ -38,11 +38,9 @@ function setupShadows(object: Object3D, cast: boolean, receive: boolean) {
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 
     for (const mat of materials) {
-      if (!mat) continue;
-
-      if ((mat as any).transparent === true) {
-        (mat as any).alphaTest = 0.5;
-        (mat as any).depthWrite = true;
+      if (mat.transparent) {
+        mat.alphaTest = 0.5;
+        mat.depthWrite = true;
       }
     }
   });
