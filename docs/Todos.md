@@ -27,7 +27,6 @@
 
 - How to cast shadows
 
-
 🧠 Nächster sinnvoller Schritt (empfohlen)
 
 Wenn du willst, können wir:
