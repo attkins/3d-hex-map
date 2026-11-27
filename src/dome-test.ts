@@ -7,6 +7,7 @@ import { hexKey, type Axial } from './game/hex';
 import { regionAt } from './game/regions';
 import { regionOutline } from './view/outline';
 import { createSpace } from './view/space';
+import { createWaterCap, createWaterfall } from './view/water';
 import { createElephantAnimation, type ElephantAnimation } from './view/elephants';
 import { createTurtleAnimation, type TurtleAnimation } from './view/turtle';
 import { getTile, type GameState } from './game/state';
@@ -160,6 +161,7 @@ let seed = 1;
 let showModels = true;
 let modelsReady = false;
 let modelGroup: Group | undefined;
+let waterCap: Mesh | undefined;
 
 // The Kay Lousberg tile has a circumradius of 1.1547 (2 across the flats), the grid hex has a circumradius of 1.
 const MODEL_SCALE = 1 / 1.1547;
@@ -232,45 +234,43 @@ function buildModels(proj: DomeProjection, session: Session, seedValue: number):
   for (const h of hexesInRadius(BOARD_RADIUS)) {
     const f = proj.frame(h);
     const tile = getTile(game, h);
+    // Sea has no tile of its own: the blue water body underneath shows through, so land stands out.
+    if (!tile) continue;
     const cell = new Group();
     cell.userData['hex'] = h;
 
-    // The tile top sits on the dome surface, water lies a little lower.
-    const base = (tile ? models.tile : models.water).clone();
+    // The tile top sits on the dome surface, the water body lies a little lower.
+    const base = models.tile.clone();
     base.position.y = -1;
-    if (tile) {
-      const material = tileMaterial(tile.owner);
-      base.traverse((child) => {
-        if ((child as Mesh).isMesh) (child as Mesh).material = material;
-      });
-    }
+    const material = tileMaterial(tile.owner);
+    base.traverse((child) => {
+      if ((child as Mesh).isMesh) (child as Mesh).material = material;
+    });
     cell.add(base);
 
-    if (tile) {
-      let deco: Object3D | undefined;
-      if (tile.structure === 'village') deco = models.house.clone();
-      else if (tile.structure === 'castle') deco = models.castle.clone();
-      else if (tile.structure === 'tree') {
-        const roll = rnd();
-        deco = (
-          roll < 0.5 ? models.forest : roll < 0.7 ? models.treeA : roll < 0.85 ? models.treeB : models.treeC
-        ).clone();
-      } else if (tile.structure === 'grave') {
-        deco = new Mesh(new CylinderGeometry(0.1, 0.12, 0.45, 6).translate(0, 0.22, 0), graveMaterial);
-      }
-      if (deco) {
-        deco.scale.setScalar(tile.structure === 'village' || tile.structure === 'castle' ? BUILDING_SCALE : TREE_SCALE);
-        deco.rotation.y = Math.floor(rnd() * 6) * (Math.PI / 3);
-        cell.add(deco);
-      }
+    let deco: Object3D | undefined;
+    if (tile.structure === 'village') deco = models.house.clone();
+    else if (tile.structure === 'castle') deco = models.castle.clone();
+    else if (tile.structure === 'tree') {
+      const roll = rnd();
+      deco = (
+        roll < 0.5 ? models.forest : roll < 0.7 ? models.treeA : roll < 0.85 ? models.treeB : models.treeC
+      ).clone();
+    } else if (tile.structure === 'grave') {
+      deco = new Mesh(new CylinderGeometry(0.1, 0.12, 0.45, 6).translate(0, 0.22, 0), graveMaterial);
+    }
+    if (deco) {
+      deco.scale.setScalar(tile.structure === 'village' || tile.structure === 'castle' ? BUILDING_SCALE : TREE_SCALE);
+      deco.rotation.y = Math.floor(rnd() * 6) * (Math.PI / 3);
+      cell.add(deco);
+    }
 
-      const figure = tile.unit && unitModels.get(unitStats[tile.unit].level)?.clone(true);
-      if (figure) {
-        figure.scale.setScalar(UNIT_SCALE);
-        figure.rotation.y = Math.floor(rnd() * 6) * (Math.PI / 3);
-        if (tile.structure === 'castle' || tile.structure === 'village') figure.position.x = 0.5;
-        cell.add(figure);
-      }
+    const figure = tile.unit && unitModels.get(unitStats[tile.unit].level)?.clone(true);
+    if (figure) {
+      figure.scale.setScalar(UNIT_SCALE);
+      figure.rotation.y = Math.floor(rnd() * 6) * (Math.PI / 3);
+      if (tile.structure === 'castle' || tile.structure === 'village') figure.position.x = 0.5;
+      cell.add(figure);
     }
 
     const mark = marks.get(hexKey(h));
@@ -372,10 +372,18 @@ function showMode(index: number): void {
   domeMesh.visible = !(showModels && modelsReady);
   scene.add(domeMesh);
 
+  if (waterCap) {
+    scene.remove(waterCap);
+    waterCap.geometry.dispose();
+    waterCap = undefined;
+  }
   if (modelGroup) scene.remove(modelGroup);
   modelGroup = undefined;
   if (modelsReady) {
-    modelGroup = buildModels(new DomeProjection({ mode, boardRadius: BOARD_RADIUS, coverage }), session, seed);
+    const proj = new DomeProjection({ mode, boardRadius: BOARD_RADIUS, coverage });
+    waterCap = createWaterCap(proj, BLENDER_DOME_APEX_Y, toonSteps);
+    scene.add(waterCap);
+    modelGroup = buildModels(proj, session, seed);
     modelGroup.visible = showModels;
     scene.add(modelGroup);
   }
@@ -532,6 +540,9 @@ new GLTFLoader()
     // The hex tiles replace the smooth blockout dome.
     const smoothDome = gltf.scene.getObjectByName('World_Dome');
     smoothDome?.removeFromParent();
+    // The earth slab sinks a little below the water surface, so its brown top no longer shows at the rim.
+    const slab = gltf.scene.getObjectByName('World_Slab');
+    if (slab) slab.position.y -= 0.35;
     gltf.scene.traverse((o) => {
       if ((o as Mesh).isMesh) {
         o.castShadow = true;
@@ -546,12 +557,17 @@ new GLTFLoader()
   })
   .catch((err) => console.error('Could not load world.glb', err));
 
+// Water runs over the edge of the disc and drips into space.
+const waterfall = createWaterfall();
+scene.add(waterfall.group);
+
 const animate = (): void => {
   requestAnimationFrame(animate);
   controls.update();
   space.update(performance.now() / 1000);
   turtle?.update(performance.now() / 1000);
   elephants?.update(performance.now() / 1000);
+  waterfall.update(performance.now() / 1000);
   space.group.position.copy(camera.position);
   renderer.render(scene, camera);
 };
