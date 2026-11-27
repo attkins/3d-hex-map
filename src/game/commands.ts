@@ -14,6 +14,7 @@ const fail = (reason: string): Failure => ({ ok: false, reason });
 
 /** All commands change the state in place. Clone it first if you need an undo. */
 
+/** A unit that enters a hex destroys a tree or grave there. Buildings are never entered this way. */
 function clearsOnEntry(tile: Tile): void {
   if (tile.structure === 'tree' || tile.structure === 'grave') delete tile.structure;
 }
@@ -98,6 +99,7 @@ export function checkMove(state: GameState, from: Axial, to: Axial): { ok: true;
   const dist = walkDistances(state, from);
   if (dst.owner === state.currentPlayer) {
     if (!dist.has(hexKey(to))) return fail('out of range');
+    if (dst.structure === 'village' || dst.structure === 'castle') return fail('hex is occupied');
     if (!dst.unit) return { ok: true, kind: 'move' };
     return mergeUnits(src.unit, dst.unit) ? { ok: true, kind: 'merge' } : fail('units cannot be combined');
   }
@@ -157,4 +159,15 @@ export function moveUnit(state: GameState, from: Axial, to: Axial, rng: Rng): Co
   delete src.moved;
   if (check.kind === 'capture') normalizeProvinces(state, rng);
   return ok;
+}
+
+/** Hexes where a bought unit or a castle can be placed, in the province that contains `from`. */
+export function placementTargets(state: GameState, from: Axial, castle: boolean): Axial[] {
+  const region = regionAt(state, from);
+  if (region?.owner !== state.currentPlayer) return [];
+  return region.hexes.filter((h) => {
+    const t = getTile(state, h);
+    if (!t || t.unit || t.structure === 'village' || t.structure === 'castle') return false;
+    return !castle || !t.structure;
+  });
 }

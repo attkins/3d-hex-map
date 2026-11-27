@@ -77,7 +77,8 @@ describe('moving', () => {
     setTile(s, { q: 2, r: 0 }, { owner: 0, unit: 'peasant' });
     const keys = moveTargets(s, { q: 2, r: 0 }).map(hexKey);
     expect(keys).toContain('3,0');
-    expect(keys).toContain('0,0');
+    expect(keys).toContain('1,0');
+    expect(keys).not.toContain('0,0');
   });
 });
 
@@ -186,5 +187,36 @@ describe('turns', () => {
     for (const key of ['0,5', '1,5']) s.tiles.delete(key);
     expect(alivePlayers(s)).toEqual([0]);
     expect(winner(s)).toBe(0);
+  });
+
+  describe('buildings and trees', () => {
+    it('does not let a unit step onto an own village or castle', () => {
+      const s = createState(9, 2);
+      for (let q = 0; q < 5; q++) setTile(s, { q, r: 0 }, { owner: 0 });
+      setTile(s, { q: 0, r: 0 }, { owner: 0, structure: 'village' });
+      setTile(s, { q: 3, r: 0 }, { owner: 0, structure: 'castle' });
+      setTile(s, { q: 1, r: 0 }, { owner: 0, unit: 'peasant' });
+      expect(checkMove(s, { q: 1, r: 0 }, { q: 3, r: 0 })).toEqual({ ok: false, reason: 'hex is occupied' });
+      expect(checkMove(s, { q: 1, r: 0 }, { q: 0, r: 0 }).ok).toBe(false);
+      expect(
+        moveTargets(s, { q: 1, r: 0 })
+          .map((h) => hexKey(h))
+          .sort()
+      ).toEqual(['2,0', '4,0']);
+    });
+
+    it('destroys a tree for good when a unit walks onto it and away again', () => {
+      const s = createState(9, 2);
+      for (let q = 0; q < 4; q++) setTile(s, { q, r: 0 }, { owner: 0 });
+      setTile(s, { q: 0, r: 0 }, { owner: 0, structure: 'village' });
+      setTile(s, { q: 1, r: 0 }, { owner: 0, unit: 'peasant' });
+      setTile(s, { q: 2, r: 0 }, { owner: 0, structure: 'tree' });
+      expect(moveUnit(s, { q: 1, r: 0 }, { q: 2, r: 0 }, createRng(1)).ok).toBe(true);
+      expect(getTile(s, { q: 2, r: 0 })).toMatchObject({ unit: 'peasant' });
+      expect(getTile(s, { q: 2, r: 0 })?.structure).toBeUndefined();
+      getTile(s, { q: 2, r: 0 })!.moved = false;
+      moveUnit(s, { q: 2, r: 0 }, { q: 3, r: 0 }, createRng(1));
+      expect(getTile(s, { q: 2, r: 0 })?.structure).toBeUndefined();
+    });
   });
 });
