@@ -34,6 +34,7 @@ import {
   MeshBasicMaterial,
   PerspectiveCamera,
   PointLight,
+  SpotLight,
   Raycaster,
   Vector2,
   Scene,
@@ -107,30 +108,46 @@ lamp.shadow.bias = -0.0005;
 lamp.shadow.normalBias = 0.05;
 scene.add(lamp);
 
+// A spotlight that puts the board in a bright pool and leaves the world beneath it in the dark.
+const spot = new SpotLight(0xfff0d8, 9000, 0, 0.36, 0.8, 2);
+spot.position.set(0, 70, 0);
+spot.target.position.set(0, 10, 0);
+spot.castShadow = true;
+spot.shadow.mapSize.set(4096, 4096);
+spot.shadow.camera.near = 20;
+spot.shadow.camera.far = 150;
+spot.shadow.bias = -0.0004;
+spot.shadow.normalBias = 0.05;
+scene.add(spot, spot.target);
+
 // Light directions to compare with key L.
 interface LightPreset {
   name: string;
   dir: Vector3;
-  /** Lamp above the board instead of the sun. */
-  lamp?: boolean;
+  /** Lamp or spotlight above the board instead of the sun. */
+  kind?: 'lamp' | 'spot';
 }
-const defaultLight: LightPreset = { name: 'Lampe über dem Feld', dir: new Vector3(0, 1, 0), lamp: true };
+const defaultLight: LightPreset = { name: 'Scheinwerfer auf dem Feld', dir: new Vector3(0, 1, 0), kind: 'spot' };
 const lightPresets: LightPreset[] = [
   defaultLight,
+  { name: 'Lampe über dem Feld', dir: new Vector3(0, 1, 0), kind: 'lamp' },
   { name: 'Sonne von oben', dir: new Vector3(0.12, 1, 0.08) },
   { name: 'schräg von oben', dir: new Vector3(0.45, 1, 0.3) },
   { name: 'dramatisch (flach)', dir: new Vector3(1, 0.55, 0.4) },
 ];
 let lightIndex = 0;
+/** Darkens the world below the board. Declared early, because the HUD reads it. */
+let worldDark = true;
 
 function currentLight(): LightPreset {
   return lightPresets[lightIndex] ?? defaultLight;
 }
 
 function applyLight(): void {
-  const useLamp = currentLight().lamp === true;
-  lamp.visible = useLamp;
-  sun.visible = !useLamp;
+  const kind = currentLight().kind;
+  lamp.visible = kind === 'lamp';
+  spot.visible = kind === 'spot';
+  sun.visible = kind === undefined;
   sun.position.copy(currentLight().dir).normalize().multiplyScalar(100).add(sun.target.position);
 }
 applyLight();
@@ -366,9 +383,9 @@ function showMode(index: number): void {
     `<b>Hex-Kuppel</b> mit ${hexesInRadius(BOARD_RADIUS).length} Feldern<br>` +
     `Projektion: <b>${modeLabels[mode]}</b><br>` +
     `Wölbung (coverage): <b>${coverage.toFixed(2)}</b> (1 = volle Halbkugel)<br>` +
-    `Licht: <b>${currentLight().name}</b>, Grundhelligkeit: <b>${ambient.intensity.toFixed(1)}</b>, Karte: <b>${showModels ? 'Modelle' : 'Farbfelder'}</b>, Zufall: <b>${seed}</b>, Spieler: <b>${players}</b><br>` +
+    `Licht: <b>${currentLight().name}</b>, Welt: <b>${worldDark ? 'dunkel' : 'hell'}</b>, Grundhelligkeit: <b>${ambient.intensity.toFixed(1)}</b>, Karte: <b>${showModels ? 'Modelle' : 'Farbfelder'}</b>, Zufall: <b>${seed}</b>, Spieler: <b>${players}</b><br>` +
     `Klick: auswählen und ziehen, Enter: Runde beenden, Esc: Auswahl aufheben<br>` +
-    `1, 2, 3: Projektion, + und -: Wölbung, L: Licht, S: Tiere bewegen, [ und ]: Grundhelligkeit, R: neue Karte, P: Spielerzahl, T: Modelle oder Farbfelder`;
+    `1, 2, 3: Projektion, + und -: Wölbung, L: Licht, S: Tiere bewegen, D: Welt abdunkeln, [ und ]: Grundhelligkeit, R: neue Karte, P: Spielerzahl, T: Modelle oder Farbfelder`;
   panel.update();
 }
 
@@ -437,6 +454,11 @@ window.addEventListener('keydown', (e) => {
     turtle.enabled = !turtle.enabled;
     elephants.enabled = turtle.enabled;
   }
+  if (e.key === 'd' || e.key === 'D') {
+    worldDark = !worldDark;
+    applyWorldDim();
+    showMode(modeIndex);
+  }
   if (e.key === '[' || e.key === ']') {
     ambient.intensity = Math.min(3, Math.max(0, ambient.intensity + (e.key === ']' ? 0.2 : -0.2)));
     showMode(modeIndex);
@@ -483,6 +505,24 @@ new GLTFLoader()
   })
   .catch((err) => console.error('Could not load units.glb', err));
 
+/** The world below the board is darkened so that all the attention goes to the game on top. */
+const WORLD_DIM = 0.3;
+const originalColors = new Map<MeshStandardMaterial, Color>();
+let worldRoot: Object3D | undefined;
+function applyWorldDim(): void {
+  worldRoot?.traverse((o) => {
+    const mesh = o as Mesh;
+    if (!mesh.isMesh) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) {
+      if (!(m instanceof MeshStandardMaterial)) continue;
+      const base = originalColors.get(m) ?? m.color.clone();
+      originalColors.set(m, base);
+      m.color.copy(base).multiplyScalar(worldDark ? WORLD_DIM : 1);
+    }
+  });
+}
+
 // World model from Blender: turtle, elephants and the earth slab.
 let turtle: TurtleAnimation | undefined;
 let elephants: ElephantAnimation | undefined;
@@ -499,6 +539,8 @@ new GLTFLoader()
       }
     });
     scene.add(gltf.scene);
+    worldRoot = gltf.scene;
+    applyWorldDim();
     turtle = createTurtleAnimation(gltf.scene);
     elephants = createElephantAnimation(gltf.scene);
   })
