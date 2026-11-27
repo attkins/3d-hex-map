@@ -59,6 +59,7 @@ const hud = document.getElementById('hud') as HTMLElement;
 const scene = new Scene();
 scene.background = new Color(0x04050e);
 const space = createSpace();
+
 scene.add(space.group);
 
 const camera = new PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 2000);
