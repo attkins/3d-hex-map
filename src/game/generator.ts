@@ -15,6 +15,12 @@ export interface MapOptions {
   treeChance?: number;
   /** Gold in each province at the start. */
   startMoney?: number;
+  /**
+   * How the land is dealt out. `scattered` is the classic start: every hex goes to a random
+   * player, so the territories are fragmented and have to be joined during the game.
+   * `compact` gives each player one connected area.
+   */
+  distribution?: 'scattered' | 'compact';
 }
 
 function pick<T>(items: readonly T[], rng: Rng): T | undefined {
@@ -69,7 +75,16 @@ function startHexes(land: readonly Axial[], players: number, rng: Rng): Axial[] 
  * province and a few trees. The same seed always gives the same map.
  */
 export function generateMap(options: MapOptions): GameState {
-  const { boardRadius, players, seed, landRatio = 0.6, islands = 3, treeChance = 0.1, startMoney = 10 } = options;
+  const {
+    boardRadius,
+    players,
+    seed,
+    landRatio = 0.6,
+    islands = 3,
+    treeChance = 0.1,
+    startMoney = 10,
+    distribution = 'scattered',
+  } = options;
   const rng = createRng(seed);
   const state = createState(boardRadius, players);
 
@@ -85,19 +100,32 @@ export function generateMap(options: MapOptions): GameState {
     if (tile) tile.owner = player;
   };
 
-  // Each player claims one neighbouring hex per round, so everybody ends up with the same size.
-  const starts = startHexes(land, players, rng);
-  const owned: Axial[][] = starts.map(() => []);
-  for (const [p, start] of starts.entries()) {
-    const list = owned[p];
-    if (list) claim(start, list, p);
-  }
-  while (free.size > 0) {
-    for (const [p, list] of owned.entries()) {
-      if (free.size === 0) break;
-      const candidates = list.flatMap(hexNeighbors).filter((n) => free.has(hexKey(n)));
-      const next = pick(candidates, rng) ?? pick([...free.values()], rng);
-      if (next) claim(next, list, p);
+  if (distribution === 'scattered') {
+    // Shuffle, then deal like cards: random pattern, but everybody gets the same number of hexes.
+    const shuffled = [...land];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j] as Axial, shuffled[i] as Axial];
+    }
+    for (const [i, h] of shuffled.entries()) {
+      const tile = getTile(state, h);
+      if (tile) tile.owner = i % players;
+    }
+  } else {
+    // Each player claims one neighbouring hex per round, so everybody ends up with the same size.
+    const starts = startHexes(land, players, rng);
+    const owned: Axial[][] = starts.map(() => []);
+    for (const [p, start] of starts.entries()) {
+      const list = owned[p];
+      if (list) claim(start, list, p);
+    }
+    while (free.size > 0) {
+      for (const [p, list] of owned.entries()) {
+        if (free.size === 0) break;
+        const candidates = list.flatMap(hexNeighbors).filter((n) => free.has(hexKey(n)));
+        const next = pick(candidates, rng) ?? pick([...free.values()], rng);
+        if (next) claim(next, list, p);
+      }
     }
   }
 

@@ -50,4 +50,17 @@ describe('generateMap', () => {
     }
     expect(alivePlayers(s)).toEqual([0, 1]);
   });
+
+  it('scatters the land by default and can group it per player', () => {
+    const scattered = findRegions(generateMap(options));
+    const compact = findRegions(generateMap({ ...options, distribution: 'compact' }));
+    expect(scattered.length).toBeGreaterThan(options.players * 3);
+    expect(compact.length).toBeLessThan(scattered.length);
+  });
+
+  it('deals scattered land evenly too', () => {
+    const s = generateMap({ ...options, distribution: 'scattered', seed: 7 });
+    const sizes = [0, 1, 2, 3].map((p) => ownedBy(s, p));
+    expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1);
+  });
 });
