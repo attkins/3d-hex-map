@@ -2,7 +2,7 @@
 
 ![A hex map on a dome, carried by four elephants on a turtle](./docs/screenshot.png)
 
-A web based 3D take on the hex strategy game [Slay](https://store.steampowered.com/app/563200/Slay/). The map lies on a shallow dome, four elephants carry the dome and the elephants stand on a turtle that flies through space.
+A web based 3D take on the hex strategy game Slay. The map lies on a shallow dome, four elephants carry the dome and the elephants stand on a turtle that flies through space.
 
 The game rules run on a plain flat hex grid. The dome only exists in the view: `src/world/dome-projection.ts` projects the grid onto a spherical cap, so the rules never have to care about the curvature.
 

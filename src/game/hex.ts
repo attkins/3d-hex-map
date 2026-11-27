@@ -43,3 +43,8 @@ export function hexKey(h: Axial): string {
 export function hexNeighbors(h: Axial): Axial[] {
   return hexDirections.map((d) => ({ q: h.q + d.q, r: h.r + d.r }));
 }
+
+export function parseHexKey(key: string): Axial | undefined {
+  const [q, r] = key.split(',').map(Number);
+  return q === undefined || r === undefined || Number.isNaN(q) || Number.isNaN(r) ? undefined : { q, r };
+}

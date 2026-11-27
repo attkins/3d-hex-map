@@ -38,3 +38,9 @@ export function mergeUnits(a: UnitKind, b: UnitKind): UnitKind | undefined {
   const level = unitStats[a].level + unitStats[b].level;
   return unitKinds.find((k) => unitStats[k].level === level);
 }
+
+/** How many steps a unit may walk through its own territory. It may then take one more hex beyond. */
+export const moveRange = 4;
+
+/** Chance per tree and round that it spreads to one random free neighbouring hex. */
+export const treeSpreadChance = 0.1;
