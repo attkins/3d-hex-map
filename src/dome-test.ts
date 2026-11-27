@@ -1,8 +1,13 @@
 import type { Object3D } from 'three';
+import { generateMap } from './game/generator';
+import { createRng } from './game/rng';
+import { unitStats } from './game/rules';
+import { getTile, type GameState } from './game/state';
 import {
   BufferAttribute,
   BufferGeometry,
   Color,
+  CylinderGeometry,
   DirectionalLight,
   Group,
   HemisphereLight,
@@ -19,7 +24,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { init as loadModels, models } from './model-loader';
 import type { ProjectionMode } from './world/dome-projection';
-import { DomeProjection, flatCorner, hexDistance, hexesInRadius } from './world/dome-projection';
+import { DomeProjection, flatCorner, hexesInRadius } from './world/dome-projection';
 
 const BOARD_RADIUS = 9;
 // Apex of the smooth dome in blender/world.blend. The hex tiles are shifted so their apex lands here.
@@ -100,54 +105,98 @@ let modelGroup: Group | undefined;
 // The Kay Lousberg tile has a circumradius of 1.1547 (2 across the flats), the grid hex has a circumradius of 1.
 const MODEL_SCALE = 1 / 1.1547;
 
-function mulberry32(a: number): () => number {
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+/** One color per player, shown as a ring around each owned hex. */
+const PLAYER_COLORS = [0xd64545, 0x3f7fd9, 0xe6b93a, 0x4fa84f, 0x9a59c9, 0xe07b2e];
+const SEA_COLOR = 0x2f6f9f;
+
+function playerColor(player: number): number {
+  return PLAYER_COLORS[player % PLAYER_COLORS.length] ?? 0xffffff;
 }
 
-/** Fills every hex with a random tile model (water or land plus decoration), placed on the dome. */
-function buildModels(proj: DomeProjection, seedValue: number): Group {
-  const rnd = mulberry32(seedValue);
-  const hexes = hexesInRadius(BOARD_RADIUS);
-  const inner = hexes.filter((h) => hexDistance(h, { q: 0, r: 0 }) <= 6);
-  const islands = Array.from({ length: 6 }, () => ({
-    center: inner[Math.floor(rnd() * inner.length)] ?? { q: 0, r: 0 },
-    radius: 2.5 + rnd() * 2,
-  }));
+const tileMaterials = new Map<number, MeshStandardMaterial>();
+const neutralTileMaterial = new MeshStandardMaterial({ color: 0x8a8a8a, flatShading: true });
+const unitMaterials = new Map<number, MeshStandardMaterial>();
+const unitGeometries = new Map<number, CylinderGeometry>();
+const graveMaterial = new MeshStandardMaterial({ color: 0x8a8a8a, flatShading: true });
 
+/** The whole tile gets the owner color, so connected territories are easy to see. */
+function tileMaterial(owner: number | undefined): MeshStandardMaterial {
+  if (owner === undefined) return neutralTileMaterial;
+  let m = tileMaterials.get(owner);
+  if (!m) {
+    m = new MeshStandardMaterial({ color: playerColor(owner), flatShading: true, roughness: 0.85 });
+    tileMaterials.set(owner, m);
+  }
+  return m;
+}
+
+function unitMaterial(player: number): MeshStandardMaterial {
+  let m = unitMaterials.get(player);
+  if (!m) {
+    m = new MeshStandardMaterial({
+      color: new Color(playerColor(player)).lerp(new Color(0x000000), 0.5),
+      flatShading: true,
+    });
+    unitMaterials.set(player, m);
+  }
+  return m;
+}
+
+/** Placeholder figure until real unit models exist: a taller pawn for a stronger unit. */
+function unitGeometry(level: number): CylinderGeometry {
+  let g = unitGeometries.get(level);
+  if (!g) {
+    const height = 0.4 + 0.3 * level;
+    g = new CylinderGeometry(0.16, 0.3, height, 8).translate(0, height / 2, 0);
+    unitGeometries.set(level, g);
+  }
+  return g;
+}
+
+/** Builds the model for every hex from the game state, placed on the dome. */
+function buildModels(proj: DomeProjection, game: GameState, seedValue: number): Group {
+  const rnd = createRng(seedValue);
   const group = new Group();
   const scale = new Vector3(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
-  let castles = 0;
 
-  for (const h of hexes) {
+  for (const h of hexesInRadius(BOARD_RADIUS)) {
     const f = proj.frame(h);
-    const land = islands.some((i) => hexDistance(h, i.center) < i.radius + (rnd() - 0.5) * 1.5);
+    const tile = getTile(game, h);
     const cell = new Group();
 
     // The tile top sits on the dome surface, water lies a little lower.
-    const base = (land ? models.tile : models.water).clone();
+    const base = (tile ? models.tile : models.water).clone();
     base.position.y = -1;
+    if (tile) {
+      const material = tileMaterial(tile.owner);
+      base.traverse((child) => {
+        if ((child as Mesh).isMesh) (child as Mesh).material = material;
+      });
+    }
     cell.add(base);
 
-    if (land) {
-      const roll = rnd();
+    if (tile) {
       let deco: Object3D | undefined;
-      if (roll < 0.025 && castles < 4) {
-        deco = models.castle.clone();
-        castles++;
-      } else if (roll < 0.04) deco = models.tower.clone();
-      else if (roll < 0.1) deco = models.house.clone();
-      else if (roll < 0.3) deco = models.forest.clone();
-      else if (roll < 0.4) deco = models.treeA.clone();
-      else if (roll < 0.47) deco = models.treeB.clone();
-      else if (roll < 0.54) deco = models.treeC.clone();
+      if (tile.structure === 'village') deco = models.house.clone();
+      else if (tile.structure === 'castle') deco = models.castle.clone();
+      else if (tile.structure === 'tree') {
+        const roll = rnd();
+        deco = (
+          roll < 0.5 ? models.forest : roll < 0.7 ? models.treeA : roll < 0.85 ? models.treeB : models.treeC
+        ).clone();
+      } else if (tile.structure === 'grave') {
+        deco = new Mesh(new CylinderGeometry(0.1, 0.12, 0.45, 6).translate(0, 0.22, 0), graveMaterial);
+      }
       if (deco) {
         deco.rotation.y = Math.floor(rnd() * 6) * (Math.PI / 3);
         cell.add(deco);
+      }
+
+      if (tile.unit && tile.owner !== undefined) {
+        const unit = new Mesh(unitGeometry(unitStats[tile.unit].level), unitMaterial(tile.owner));
+        unit.castShadow = true;
+        if (tile.structure === 'castle' || tile.structure === 'village') unit.position.x = 0.6;
+        cell.add(unit);
       }
     }
 
@@ -167,7 +216,8 @@ function buildModels(proj: DomeProjection, seedValue: number): Group {
   return group;
 }
 
-function buildDome(mode: ProjectionMode): Mesh {
+/** Plain colored hexes: owner color on land, blue for sea. */
+function buildDome(mode: ProjectionMode, game: GameState): Mesh {
   const proj = new DomeProjection({ mode, boardRadius: BOARD_RADIUS, coverage });
   const hexes = hexesInRadius(BOARD_RADIUS);
   const positions: number[] = [];
@@ -175,10 +225,9 @@ function buildDome(mode: ProjectionMode): Mesh {
   const color = new Color();
 
   for (const h of hexes) {
-    const ring = hexDistance(h, { q: 0, r: 0 });
-    // Small checker variation so single hexes stay visible
-    const light = 0.42 + ((0.06 * (((h.q - h.r) % 3) + 3)) % 3);
-    color.setHSL(0.32 - (ring / BOARD_RADIUS) * 0.22, 0.55, light);
+    const owner = getTile(game, h)?.owner;
+    const land = getTile(game, h) !== undefined;
+    color.set(land ? (owner === undefined ? 0x8a8a8a : playerColor(owner)) : SEA_COLOR);
 
     const c = proj.frame(h).position;
     const corners = [0, 1, 2, 3, 4, 5].map((i) => {
@@ -203,6 +252,13 @@ function buildDome(mode: ProjectionMode): Mesh {
   return mesh;
 }
 
+let players = 4;
+let game: GameState = generateMap({ boardRadius: BOARD_RADIUS, players, seed });
+
+function newGame(): void {
+  game = generateMap({ boardRadius: BOARD_RADIUS, players, seed });
+}
+
 function showMode(index: number): void {
   modeIndex = index;
   if (domeMesh) {
@@ -210,14 +266,14 @@ function showMode(index: number): void {
     domeMesh.geometry.dispose();
   }
   const mode = modes[modeIndex] ?? 'conformal';
-  domeMesh = buildDome(mode);
+  domeMesh = buildDome(mode, game);
   domeMesh.visible = !(showModels && modelsReady);
   scene.add(domeMesh);
 
   if (modelGroup) scene.remove(modelGroup);
   modelGroup = undefined;
   if (modelsReady) {
-    modelGroup = buildModels(new DomeProjection({ mode, boardRadius: BOARD_RADIUS, coverage }), seed);
+    modelGroup = buildModels(new DomeProjection({ mode, boardRadius: BOARD_RADIUS, coverage }), game, seed);
     modelGroup.visible = showModels;
     scene.add(modelGroup);
   }
@@ -225,8 +281,8 @@ function showMode(index: number): void {
     `<b>Hex-Kuppel</b> mit ${hexesInRadius(BOARD_RADIUS).length} Feldern<br>` +
     `Projektion: <b>${modeLabels[mode]}</b><br>` +
     `Wölbung (coverage): <b>${coverage.toFixed(2)}</b> (1 = volle Halbkugel)<br>` +
-    `Licht: <b>${currentLight().name}</b>, Karte: <b>${showModels ? 'Modelle' : 'Farbfelder'}</b>, Zufall: <b>${seed}</b><br>` +
-    `1, 2, 3: Projektion, + und -: Wölbung, L: Licht, R: neu würfeln, T: Modelle oder Farbfelder`;
+    `Licht: <b>${currentLight().name}</b>, Karte: <b>${showModels ? 'Modelle' : 'Farbfelder'}</b>, Zufall: <b>${seed}</b>, Spieler: <b>${players}</b><br>` +
+    `1, 2, 3: Projektion, + und -: Wölbung, L: Licht, R: neue Karte, P: Spielerzahl, T: Modelle oder Farbfelder`;
 }
 
 window.addEventListener('keydown', (e) => {
@@ -239,6 +295,12 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.key === 'r' || e.key === 'R') {
     seed += 1;
+    newGame();
+    showMode(modeIndex);
+  }
+  if (e.key === 'p' || e.key === 'P') {
+    players = players >= PLAYER_COLORS.length ? 2 : players + 1;
+    newGame();
     showMode(modeIndex);
   }
   if (e.key === 't' || e.key === 'T') {
