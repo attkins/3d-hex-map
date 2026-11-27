@@ -2,8 +2,16 @@ import type { Object3D } from 'three';
 import { generateMap } from './game/generator';
 import { createRng } from './game/rng';
 import { unitKinds, unitStats } from './game/rules';
+import { Session, type Highlight } from './game/session';
+import { hexKey, type Axial } from './game/hex';
+import { regionAt } from './game/regions';
+import { regionOutline } from './view/outline';
+import { createSpace } from './view/space';
 import { getTile, type GameState } from './game/state';
+import { createGamePanel } from './ui/game-panel';
+import { PLAYER_COLORS, playerColor } from './view/colors';
 import {
+  AmbientLight,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -16,7 +24,16 @@ import {
   Mesh,
   MeshStandardMaterial,
   PCFSoftShadowMap,
+  CircleGeometry,
+  DataTexture,
+  MeshToonMaterial,
+  NearestFilter,
+  RedFormat,
+  MeshBasicMaterial,
   PerspectiveCamera,
+  PointLight,
+  Raycaster,
+  Vector2,
   Scene,
   WebGLRenderer,
 } from 'three';
@@ -40,9 +57,11 @@ const container = document.getElementById('container') as HTMLElement;
 const hud = document.getElementById('hud') as HTMLElement;
 
 const scene = new Scene();
-scene.background = new Color(0x0b0e1a);
+scene.background = new Color(0x04050e);
+const space = createSpace();
+scene.add(space.group);
 
-const camera = new PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 2000);
 camera.position.set(0, 40, 66);
 
 const renderer = new WebGLRenderer({ antialias: true });
@@ -56,8 +75,11 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.target.set(0, 8, 0);
 
-scene.add(new HemisphereLight(0xbfd8ff, 0x3a2f24, 0.35));
-const sun = new DirectionalLight(0xfff1d6, 2.6);
+scene.add(new HemisphereLight(0xdcebff, 0x8a7a66, 0.6));
+// Ambient light has no direction and lights everything equally, so shadowed sides stay readable.
+const ambient = new AmbientLight(0xffffff, 0.6);
+scene.add(ambient);
+const sun = new DirectionalLight(0xfff4e0, 2.2);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
 sun.shadow.camera.left = -45;
@@ -71,14 +93,28 @@ sun.shadow.normalBias = 0.05;
 sun.target.position.set(0, 5, 0);
 scene.add(sun, sun.target);
 
+// A lamp floating above the board. Intensity is in candela, so it falls off with the square of the distance.
+const lamp = new PointLight(0xfff0d8, 2600, 0, 2);
+lamp.position.set(0, 48, 0);
+lamp.castShadow = true;
+lamp.shadow.mapSize.set(2048, 2048);
+lamp.shadow.camera.near = 1;
+lamp.shadow.camera.far = 150;
+lamp.shadow.bias = -0.0005;
+lamp.shadow.normalBias = 0.05;
+scene.add(lamp);
+
 // Light directions to compare with key L.
 interface LightPreset {
   name: string;
   dir: Vector3;
+  /** Lamp above the board instead of the sun. */
+  lamp?: boolean;
 }
-const defaultLight: LightPreset = { name: 'von oben', dir: new Vector3(0.12, 1, 0.08) };
+const defaultLight: LightPreset = { name: 'Lampe über dem Feld', dir: new Vector3(0, 1, 0), lamp: true };
 const lightPresets: LightPreset[] = [
   defaultLight,
+  { name: 'Sonne von oben', dir: new Vector3(0.12, 1, 0.08) },
   { name: 'schräg von oben', dir: new Vector3(0.45, 1, 0.3) },
   { name: 'dramatisch (flach)', dir: new Vector3(1, 0.55, 0.4) },
 ];
@@ -89,6 +125,9 @@ function currentLight(): LightPreset {
 }
 
 function applyLight(): void {
+  const useLamp = currentLight().lamp === true;
+  lamp.visible = useLamp;
+  sun.visible = !useLamp;
   sun.position.copy(currentLight().dir).normalize().multiplyScalar(100).add(sun.target.position);
 }
 applyLight();
@@ -105,34 +144,67 @@ let modelGroup: Group | undefined;
 // The Kay Lousberg tile has a circumradius of 1.1547 (2 across the flats), the grid hex has a circumradius of 1.
 const MODEL_SCALE = 1 / 1.1547;
 
-/** One color per player, shown as a ring around each owned hex. */
-const PLAYER_COLORS = [0xd64545, 0x3f7fd9, 0xe6b93a, 0x4fa84f, 0x9a59c9, 0xe07b2e];
-const SEA_COLOR = 0x2f6f9f;
+const SEA_COLOR = 0x3a8fc8;
 
-function playerColor(player: number): number {
-  return PLAYER_COLORS[player % PLAYER_COLORS.length] ?? 0xffffff;
-}
-
-const tileMaterials = new Map<number, MeshStandardMaterial>();
-const neutralTileMaterial = new MeshStandardMaterial({ color: 0x8a8a8a, flatShading: true });
+const tileMaterials = new Map<number, MeshToonMaterial>();
+/** Four hard light steps give the tiles a cartoon look. */
+const toonSteps = new DataTexture(new Uint8Array([140, 185, 225, 255]), 4, 1, RedFormat);
+toonSteps.minFilter = NearestFilter;
+toonSteps.magFilter = NearestFilter;
+toonSteps.needsUpdate = true;
+const neutralTileMaterial = new MeshToonMaterial({ color: 0xc4c4c4, gradientMap: toonSteps });
 /** Figures from blender/units.blend, one per unit level, loaded from src/models/units.glb. */
 const unitModels = new Map<number, Object3D>();
 const UNIT_SCALE = 0.85;
+/** Buildings and trees are scaled down so the figures and the owner colors stay readable. */
+const BUILDING_SCALE = 0.7;
+const TREE_SCALE = 0.55;
 const graveMaterial = new MeshStandardMaterial({ color: 0x8a8a8a, flatShading: true });
 
 /** The whole tile gets the owner color, so connected territories are easy to see. */
-function tileMaterial(owner: number | undefined): MeshStandardMaterial {
+function tileMaterial(owner: number | undefined): MeshToonMaterial {
   if (owner === undefined) return neutralTileMaterial;
   let m = tileMaterials.get(owner);
   if (!m) {
-    m = new MeshStandardMaterial({ color: playerColor(owner), flatShading: true, roughness: 0.85 });
+    m = new MeshToonMaterial({ color: playerColor(owner), gradientMap: toonSteps });
     tileMaterials.set(owner, m);
   }
   return m;
 }
 
+const highlightColors: Record<Highlight, number> = {
+  selected: 0xffe066,
+  move: 0xffffff,
+  merge: 0x66e0ff,
+  capture: 0xff5533,
+  place: 0xaaff88,
+};
+const highlightMaterials = new Map<Highlight, MeshBasicMaterial>();
+let highlightGeometry: CircleGeometry | undefined;
+
+/** Flat translucent hexagon that lies on a tile to mark it. */
+function highlightPlate(kind: Highlight): Mesh {
+  highlightGeometry ??= new CircleGeometry(1.1547 * 0.9, 6).rotateX(-Math.PI / 2).rotateY(Math.PI / 6);
+  let m = highlightMaterials.get(kind);
+  if (!m) {
+    m = new MeshBasicMaterial({
+      color: highlightColors[kind],
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
+    });
+    highlightMaterials.set(kind, m);
+  }
+  const plate = new Mesh(highlightGeometry, m);
+  plate.position.y = 0.08;
+  plate.renderOrder = 2;
+  return plate;
+}
+
 /** Builds the model for every hex from the game state, placed on the dome. */
-function buildModels(proj: DomeProjection, game: GameState, seedValue: number): Group {
+function buildModels(proj: DomeProjection, session: Session, seedValue: number): Group {
+  const game = session.state;
+  const marks = session.highlights();
   const rnd = createRng(seedValue);
   const group = new Group();
   const scale = new Vector3(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
@@ -141,6 +213,7 @@ function buildModels(proj: DomeProjection, game: GameState, seedValue: number): 
     const f = proj.frame(h);
     const tile = getTile(game, h);
     const cell = new Group();
+    cell.userData['hex'] = h;
 
     // The tile top sits on the dome surface, water lies a little lower.
     const base = (tile ? models.tile : models.water).clone();
@@ -166,6 +239,7 @@ function buildModels(proj: DomeProjection, game: GameState, seedValue: number): 
         deco = new Mesh(new CylinderGeometry(0.1, 0.12, 0.45, 6).translate(0, 0.22, 0), graveMaterial);
       }
       if (deco) {
+        deco.scale.setScalar(tile.structure === 'village' || tile.structure === 'castle' ? BUILDING_SCALE : TREE_SCALE);
         deco.rotation.y = Math.floor(rnd() * 6) * (Math.PI / 3);
         cell.add(deco);
       }
@@ -174,10 +248,13 @@ function buildModels(proj: DomeProjection, game: GameState, seedValue: number): 
       if (figure) {
         figure.scale.setScalar(UNIT_SCALE);
         figure.rotation.y = Math.floor(rnd() * 6) * (Math.PI / 3);
-        if (tile.structure === 'castle' || tile.structure === 'village') figure.position.x = 0.6;
+        if (tile.structure === 'castle' || tile.structure === 'village') figure.position.x = 0.5;
         cell.add(figure);
       }
     }
+
+    const mark = marks.get(hexKey(h));
+    if (mark) cell.add(highlightPlate(mark));
 
     // Local frame: x along the flat grid x axis, y along the dome normal.
     const x = new Vector3(f.east.x, f.east.y, f.east.z);
@@ -189,6 +266,15 @@ function buildModels(proj: DomeProjection, game: GameState, seedValue: number): 
       .setPosition(f.position.x, f.position.y, f.position.z)
       .decompose(cell.position, cell.quaternion, cell.scale);
     group.add(cell);
+  }
+
+  if (session.selected) {
+    const region = regionAt(game, session.selected);
+    if (region) {
+      const outline = regionOutline(proj, region.hexes);
+      outline.raycast = () => undefined; // clicks go through to the tiles
+      group.add(outline);
+    }
   }
 
   group.position.y = BLENDER_DOME_APEX_Y - proj.radius;
@@ -232,7 +318,7 @@ function buildDome(mode: ProjectionMode, game: GameState): Mesh {
 }
 
 let players = 4;
-let game: GameState = newGameState();
+let session = new Session(newGameState(), createRng(1));
 
 /** Preview only: puts a few units of all levels on free hexes, so the figures can be judged. */
 function newGameState(): GameState {
@@ -246,8 +332,14 @@ function newGameState(): GameState {
 }
 
 function newGame(): void {
-  game = newGameState();
+  session = new Session(newGameState(), createRng(seed + 2000));
 }
+
+const panel = createGamePanel(
+  document.body,
+  () => session,
+  () => showMode(modeIndex)
+);
 
 function showMode(index: number): void {
   modeIndex = index;
@@ -256,14 +348,14 @@ function showMode(index: number): void {
     domeMesh.geometry.dispose();
   }
   const mode = modes[modeIndex] ?? 'conformal';
-  domeMesh = buildDome(mode, game);
+  domeMesh = buildDome(mode, session.state);
   domeMesh.visible = !(showModels && modelsReady);
   scene.add(domeMesh);
 
   if (modelGroup) scene.remove(modelGroup);
   modelGroup = undefined;
   if (modelsReady) {
-    modelGroup = buildModels(new DomeProjection({ mode, boardRadius: BOARD_RADIUS, coverage }), game, seed);
+    modelGroup = buildModels(new DomeProjection({ mode, boardRadius: BOARD_RADIUS, coverage }), session, seed);
     modelGroup.visible = showModels;
     scene.add(modelGroup);
   }
@@ -271,11 +363,52 @@ function showMode(index: number): void {
     `<b>Hex-Kuppel</b> mit ${hexesInRadius(BOARD_RADIUS).length} Feldern<br>` +
     `Projektion: <b>${modeLabels[mode]}</b><br>` +
     `Wölbung (coverage): <b>${coverage.toFixed(2)}</b> (1 = volle Halbkugel)<br>` +
-    `Licht: <b>${currentLight().name}</b>, Karte: <b>${showModels ? 'Modelle' : 'Farbfelder'}</b>, Zufall: <b>${seed}</b>, Spieler: <b>${players}</b><br>` +
-    `1, 2, 3: Projektion, + und -: Wölbung, L: Licht, R: neue Karte, P: Spielerzahl, T: Modelle oder Farbfelder`;
+    `Licht: <b>${currentLight().name}</b>, Grundhelligkeit: <b>${ambient.intensity.toFixed(1)}</b>, Karte: <b>${showModels ? 'Modelle' : 'Farbfelder'}</b>, Zufall: <b>${seed}</b>, Spieler: <b>${players}</b><br>` +
+    `Klick: auswählen und ziehen, Enter: Runde beenden, Esc: Auswahl aufheben<br>` +
+    `1, 2, 3: Projektion, + und -: Wölbung, L: Licht, [ und ]: Grundhelligkeit, R: neue Karte, P: Spielerzahl, T: Modelle oder Farbfelder`;
+  panel.update();
 }
 
+function pick(ev: PointerEvent): Axial | undefined {
+  if (!modelGroup || !showModels) return undefined;
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.set(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects(modelGroup.children, true)[0];
+  for (let o: Object3D | null = hit?.object ?? null; o; o = o.parent) {
+    const h = o.userData['hex'] as Axial | undefined;
+    if (h) return h;
+  }
+  return undefined;
+}
+
+// A click is a press and release that hardly moved, so dragging still rotates the camera.
+const raycaster = new Raycaster();
+const pointer = new Vector2();
+let pressAt: { x: number; y: number } | undefined;
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  pressAt = { x: e.clientX, y: e.clientY };
+});
+renderer.domElement.addEventListener('pointerup', (e) => {
+  const start = pressAt;
+  pressAt = undefined;
+  if (!start || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5) return;
+  const h = pick(e);
+  if (!h) return;
+  session.click(h);
+  showMode(modeIndex);
+});
+
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    session.endTurn();
+    showMode(modeIndex);
+  }
+  if (e.key === 'Escape') {
+    session.selected = undefined;
+    session.holding = undefined;
+    showMode(modeIndex);
+  }
   const n = Number(e.key);
   if (n >= 1 && n <= modes.length) showMode(n - 1);
   if (e.key === 'l' || e.key === 'L') {
@@ -295,6 +428,10 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.key === 't' || e.key === 'T') {
     showModels = !showModels;
+    showMode(modeIndex);
+  }
+  if (e.key === '[' || e.key === ']') {
+    ambient.intensity = Math.min(3, Math.max(0, ambient.intensity + (e.key === ']' ? 0.2 : -0.2)));
     showMode(modeIndex);
   }
   if (e.key === '+' || e.key === '-') {
@@ -359,6 +496,8 @@ new GLTFLoader()
 const animate = (): void => {
   requestAnimationFrame(animate);
   controls.update();
+  space.update(performance.now() / 1000);
+  space.group.position.copy(camera.position);
   renderer.render(scene, camera);
 };
 animate();
