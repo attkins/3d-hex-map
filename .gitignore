@@ -12,3 +12,7 @@ coverage
 
 # Blender writes a backup next to every save
 *.blend1
+
+# Local scratch and downloaded source assets (CC0, see blender/source/kaykit/LICENSE.txt)
+_review/
+blender/source/kaykit/*.glb

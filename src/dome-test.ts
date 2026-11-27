@@ -1,7 +1,7 @@
 import type { Object3D } from 'three';
 import { generateMap } from './game/generator';
 import { createRng } from './game/rng';
-import { unitStats } from './game/rules';
+import { unitKinds, unitStats } from './game/rules';
 import { getTile, type GameState } from './game/state';
 import {
   BufferAttribute,
@@ -115,8 +115,9 @@ function playerColor(player: number): number {
 
 const tileMaterials = new Map<number, MeshStandardMaterial>();
 const neutralTileMaterial = new MeshStandardMaterial({ color: 0x8a8a8a, flatShading: true });
-const unitMaterials = new Map<number, MeshStandardMaterial>();
-const unitGeometries = new Map<number, CylinderGeometry>();
+/** Figures from blender/units.blend, one per unit level, loaded from src/models/units.glb. */
+const unitModels = new Map<number, Object3D>();
+const UNIT_SCALE = 0.85;
 const graveMaterial = new MeshStandardMaterial({ color: 0x8a8a8a, flatShading: true });
 
 /** The whole tile gets the owner color, so connected territories are easy to see. */
@@ -128,29 +129,6 @@ function tileMaterial(owner: number | undefined): MeshStandardMaterial {
     tileMaterials.set(owner, m);
   }
   return m;
-}
-
-function unitMaterial(player: number): MeshStandardMaterial {
-  let m = unitMaterials.get(player);
-  if (!m) {
-    m = new MeshStandardMaterial({
-      color: new Color(playerColor(player)).lerp(new Color(0x000000), 0.5),
-      flatShading: true,
-    });
-    unitMaterials.set(player, m);
-  }
-  return m;
-}
-
-/** Placeholder figure until real unit models exist: a taller pawn for a stronger unit. */
-function unitGeometry(level: number): CylinderGeometry {
-  let g = unitGeometries.get(level);
-  if (!g) {
-    const height = 0.4 + 0.3 * level;
-    g = new CylinderGeometry(0.16, 0.3, height, 8).translate(0, height / 2, 0);
-    unitGeometries.set(level, g);
-  }
-  return g;
 }
 
 /** Builds the model for every hex from the game state, placed on the dome. */
@@ -192,11 +170,12 @@ function buildModels(proj: DomeProjection, game: GameState, seedValue: number): 
         cell.add(deco);
       }
 
-      if (tile.unit && tile.owner !== undefined) {
-        const unit = new Mesh(unitGeometry(unitStats[tile.unit].level), unitMaterial(tile.owner));
-        unit.castShadow = true;
-        if (tile.structure === 'castle' || tile.structure === 'village') unit.position.x = 0.6;
-        cell.add(unit);
+      const figure = tile.unit && unitModels.get(unitStats[tile.unit].level)?.clone(true);
+      if (figure) {
+        figure.scale.setScalar(UNIT_SCALE);
+        figure.rotation.y = Math.floor(rnd() * 6) * (Math.PI / 3);
+        if (tile.structure === 'castle' || tile.structure === 'village') figure.position.x = 0.6;
+        cell.add(figure);
       }
     }
 
@@ -253,10 +232,21 @@ function buildDome(mode: ProjectionMode, game: GameState): Mesh {
 }
 
 let players = 4;
-let game: GameState = generateMap({ boardRadius: BOARD_RADIUS, players, seed });
+let game: GameState = newGameState();
+
+/** Preview only: puts a few units of all levels on free hexes, so the figures can be judged. */
+function newGameState(): GameState {
+  const state = generateMap({ boardRadius: BOARD_RADIUS, players, seed });
+  const rnd = createRng(seed + 1000);
+  for (const tile of state.tiles.values()) {
+    if (tile.owner === undefined || tile.structure || rnd() > 0.14) continue;
+    tile.unit = unitKinds[Math.floor(rnd() * unitKinds.length)];
+  }
+  return state;
+}
 
 function newGame(): void {
-  game = generateMap({ boardRadius: BOARD_RADIUS, players, seed });
+  game = newGameState();
 }
 
 function showMode(index: number): void {
@@ -328,6 +318,26 @@ loadModels()
     showMode(modeIndex);
   })
   .catch((err) => console.error('Could not load tile models', err));
+
+// Unit figures from Blender: one node per unit level, named Unit_<level>_<name>.
+new GLTFLoader()
+  .loadAsync(new URL('./models/units.glb', import.meta.url).href)
+  .then((gltf) => {
+    for (const node of gltf.scene.children) {
+      const level = Number(/^Unit_(\d)_/.exec(node.name)?.[1]);
+      if (!level) continue;
+      node.position.set(0, 0, 0);
+      node.traverse((o) => {
+        if ((o as Mesh).isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+        }
+      });
+      unitModels.set(level, node);
+    }
+    showMode(modeIndex);
+  })
+  .catch((err) => console.error('Could not load units.glb', err));
 
 // World model from Blender: turtle, elephants and the earth slab.
 new GLTFLoader()
