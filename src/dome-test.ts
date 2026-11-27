@@ -7,6 +7,7 @@ import { hexKey, type Axial } from './game/hex';
 import { regionAt } from './game/regions';
 import { regionOutline } from './view/outline';
 import { createSpace } from './view/space';
+import { createTurtleAnimation, type TurtleAnimation } from './view/turtle';
 import { getTile, type GameState } from './game/state';
 import { createGamePanel } from './ui/game-panel';
 import { PLAYER_COLORS, playerColor } from './view/colors';
@@ -366,7 +367,7 @@ function showMode(index: number): void {
     `Wölbung (coverage): <b>${coverage.toFixed(2)}</b> (1 = volle Halbkugel)<br>` +
     `Licht: <b>${currentLight().name}</b>, Grundhelligkeit: <b>${ambient.intensity.toFixed(1)}</b>, Karte: <b>${showModels ? 'Modelle' : 'Farbfelder'}</b>, Zufall: <b>${seed}</b>, Spieler: <b>${players}</b><br>` +
     `Klick: auswählen und ziehen, Enter: Runde beenden, Esc: Auswahl aufheben<br>` +
-    `1, 2, 3: Projektion, + und -: Wölbung, L: Licht, [ und ]: Grundhelligkeit, R: neue Karte, P: Spielerzahl, T: Modelle oder Farbfelder`;
+    `1, 2, 3: Projektion, + und -: Wölbung, L: Licht, S: Schildkröte schwimmt, [ und ]: Grundhelligkeit, R: neue Karte, P: Spielerzahl, T: Modelle oder Farbfelder`;
   panel.update();
 }
 
@@ -431,6 +432,7 @@ window.addEventListener('keydown', (e) => {
     showModels = !showModels;
     showMode(modeIndex);
   }
+  if ((e.key === 's' || e.key === 'S') && turtle) turtle.enabled = !turtle.enabled;
   if (e.key === '[' || e.key === ']') {
     ambient.intensity = Math.min(3, Math.max(0, ambient.intensity + (e.key === ']' ? 0.2 : -0.2)));
     showMode(modeIndex);
@@ -478,6 +480,7 @@ new GLTFLoader()
   .catch((err) => console.error('Could not load units.glb', err));
 
 // World model from Blender: turtle, elephants and the earth slab.
+let turtle: TurtleAnimation | undefined;
 new GLTFLoader()
   .loadAsync(new URL('./models/world.glb', import.meta.url).href)
   .then((gltf) => {
@@ -491,6 +494,7 @@ new GLTFLoader()
       }
     });
     scene.add(gltf.scene);
+    turtle = createTurtleAnimation(gltf.scene);
   })
   .catch((err) => console.error('Could not load world.glb', err));
 
@@ -498,6 +502,7 @@ const animate = (): void => {
   requestAnimationFrame(animate);
   controls.update();
   space.update(performance.now() / 1000);
+  turtle?.update(performance.now() / 1000);
   space.group.position.copy(camera.position);
   renderer.render(scene, camera);
 };
